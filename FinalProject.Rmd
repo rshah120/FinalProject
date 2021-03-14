@@ -1,30 +1,206 @@
 ---
-title: "FinalProject"
+title: 'Testing the Old Adage: Does Defense Win Championships?'
 author: "Rohit Shah"
-date: "3/10/2021"
-output: html_document
+output: 
+  html_document:
+    theme: journal
+    keep_md: TRUE
+    toc: TRUE
+    toc_float: TRUE
+    df_print: paged
+    code_download: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, error=TRUE, message=FALSE, warning=FALSE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r libraries, echo = FALSE}
+library(tidyverse)     # for data cleaning and plotting
+library(gardenR)       # for Lisa's garden data
+library(lubridate)     # for date manipulation
+library(openintro)     # for the abbr2state() function
+library(palmerpenguins)# for Palmer penguin data
+library(maps)          # for map data
+library(ggmap)         # for mapping points on maps
+library(gplots)        # for col2hex() function
+library(RColorBrewer)  # for color palettes
+library(sf)            # for working with spatial data
+library(leaflet)       # for highly customizable mapping
+library(ggthemes)      # for more themes (including theme_map())
+library(plotly)        # for the ggplotly() - basic interactivity
+library(babynames)
+library(gganimate)     # for adding animation layers to ggplots
+library(transformr)    # for "tweening" (gganimate)
+library(gifski)        # need the library for creating gifs but don't need to load each time
+library(shiny)         # for creating interactive apps
+library(patchwork)
+theme_set(theme_minimal())
 ```
 
-## Including Plots
+## Question
 
-You can also embed plots, for example:
+Testing the old saying, does "defense win championships"? I analyze
+Super Bowl performances from 1967-2020, comparing historically great teams
+- ones that have won more than two Super Bowls - to teams that have had brief
+success. Is having a superior defense the key to sustained Super Bowl
+success? If not, what is?
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Data Collection
+
+```{r, echo = FALSE}
+superbowl <- read_csv("superbowl.csv") %>%
+  mutate(point_differential = Winner_Pts - Loser_Pts)
+
+draft_order <- read_csv("draft_order.csv")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+This [Super Bowl](https://www.kaggle.com/timoboz/superbowl-history-1967-2020) 
+data can be credited to Timo Bozsolik, who posted the data on
+Kaggle. This data contains Super Bowl data from Super Bowl I in 1967, all the
+way until Super Bowl LIV in 2020. It contains data on the winner, loser, points
+scored by each team, MVP, and location of the game. I mutate point differential
+to the dataset, and quickly add Super Bowl LV data from 2021.
+
+The draft grades data is taken from the following Bleacher Report [article](https://photos.google.com/share/AF1QipNZYJhV7-8_BmZSPBVh1BZ7HX22kdHfXFj8ixDSI-MCVmQrucJdXklE9Thp0cZhYg?key=cF96MWMwNFZvMGhaMTB0VTY4NWwtVkRPMGV5V1F3),
+and I have converted the letter grades (A-F) to numeric values 
+of 1-13, with 1 being an A+, 2 being an A, all the way to F, which is 13. I also
+created a column in the excel file to represent the number of Super Bowl
+appearances for each organization from 2003-2021. I chose the given time frame 
+for Super Bowl appearances since the Bleacher Report article provides data
+from 2003-2012 and drafts have a long-term effect as well. For example, players 
+from a draft in 2012 may develop a few years down the road and maximize their 
+impact in 2017, although this is a less certain possibility. 
+
+## Analysis
+```{r, echo = FALSE}
+superbowl %>%
+  ggplot(aes(x = Date, y = point_differential)) +
+  geom_line() +
+  stat_summary(aes(y = median(point_differential, group = 2), color="red", 
+                   geom ="line",group = 2)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  labs(title = "Point Differential Since 1967") +
+  transition_reveal(Date)
+```
+
+Super Bowls are generally tight affairs, as shown in the graph below. 
+Although there is a large range of point differential, Super Bowls have been
+decided by a median point differential of just above 10 points since 1967, as
+represented by red dot on the animated plot. Especially as the median point 
+differential has decreased since the turn of the century, when games are this 
+tight, it makes sense that a superior defense would make this marginal 
+difference between losing and winning a championship.
+
+Let's dive in.
+```{r, echo = FALSE}
+points_allowed <-
+  superbowl %>% 
+  group_by(Winner) %>%
+  mutate(total_wins = n(), 
+         sustained = total_wins > 2) %>%
+  ggplot(aes(x = sustained, y = Loser_Pts, color = sustained)) +
+  geom_boxplot() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  labs(title = "Points Allowed")
+
+ggplotly(points_allowed, tooltip = c("Loser_Pts"))
+```
+
+Sustained, or historically great, winners allow a median of 17 points
+in the Super Bowl, while those with limited success allow a median of 10
+points. Although historically great teams have a minimum lower points allowed,
+it is clear to see that, surprisingly, sustainably great teams don't necessarily 
+have superior defenses, at least based on Super Bowl performances. This doesn't
+say anything about the importance of defense in the regular season, but winning
+more Super Bowls isn't associated with superior defensive performances. 
+
+```{r, echo = FALSE}
+points_scored <-
+  superbowl %>% 
+  group_by(Winner) %>%
+  mutate(total_wins = n(), 
+         sustained = total_wins > 2) %>%
+  ggplot(aes(x = sustained, y = Winner_Pts, color = sustained)) +
+  geom_boxplot() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  labs(title = "Points Scored")
+
+ggplotly(points_scored, tooltip = c("Winner_Pts"))
+```
+
+Historically great teams score an even lower median of 29 points in the
+Super Bowl, compared to a median of 31 points for non-historically great teams.
+However, the range for points scored is greater for historically great teams.
+It's interesting that the organizations with non-sustained success appear to 
+have both offenses and defenses that perform better in the Super Bowl, 
+quite contrary to what I initially believed.
+
+```{r, echo = FALSE}
+point_differential <-
+  superbowl %>%
+  group_by(Winner) %>%
+  mutate(total_wins = n(), 
+         sustained = total_wins > 2) %>%
+  ggplot(aes(x = sustained, y = point_differential, color = sustained)) +
+  geom_boxplot() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  labs(title = "Point Differential")
+
+ggplotly(point_differential, tooltip = c("point_differential"))
+```
+The aforementioned notion is validated by this graph, with historically great
+organizations playing in closer Super Bowls, as the median point differential
+is 10 points. This is much less than the median point differential of 16 points
+for organizations with non-sustained success. Although the difference between
+the two median point differentials may appear marginal, 6 points is the 
+equivalent of one touchdown. This means that those with non-sustained success
+win Super Bowls by a median differential of almost 3 scores, compared to a much
+tighter 2-score differential for sustainable winners.
+
+Why is this the case? Let's examine the figure above, which depicts the 
+relationship between Super Bowl appearances from 2003-2021 and Draft Grades 
+for teams between 2003-2012. 
+
+```{r, echo = FALSE}
+draft_graph <-
+  draft_order %>%
+  ggplot(aes(x = Draft_Ranking, y = Super_Bowl_Appearances, fill = Team)) +
+  geom_col() +
+  ylim(0,9) +
+  xlim(0,10) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  labs(title = "2003-2021 Super Bowl Appearances vs Draft Grade",
+       caption = "2003-2012 Draft Grades") +
+  scale_fill_viridis_d()
+
+ggplotly(draft_graph, tooltip = c("Team", "Super_Bowl_Appearances", 
+                                  "Draft_Ranking"))
+```
+
+My findings so far lead me to hypothesize that organizations with brief success 
+go all out for those 1 or 2 particular years, occasionally capitalizing on
+high draft picks and free agency signings. However, their lack of sustained 
+success may come down to a lack of long-term planning, such as a steady stream
+of poor drafts and free agency signings that don't provide any long-term 
+benefit. They may get things right for a season or two, but for the most 
+part, they fail.
+
+This largely holds true based on the figure above, as organizations like the 
+New England Patriots, Pittsburgh Steelers, and Seattle Seahawks, which have had
+more than two Super Bowl appearances since 2003, have grades of A, A+, and B-,
+respectively. While there are teams like the Cowboys and Texans that have B 
+grades but haven't made the Super Bowl, only teams with a C draft grade or 
+higher have made the Super Bowl since 2003. Furthermore, teams like the Packers 
+and Ravens, which have had only one appearance since 2003 but have high draft 
+grades, enjoy plenty of playoff appearances and success without making 
+the championship. There definitely is a relationship between quality of draft 
+picks and long-term success.
+
+## Conclusion
+
+The NFL is full of talent, but talent can come and go in the league, either due
+to money, injury, or retirement. In order to create sustained success, 
+organizations need to effectively plan for the future, either through
+management, free agency transactions, or draft picks. 
+
